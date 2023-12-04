@@ -1,0 +1,205 @@
+load "iovtk"
+load "isoline"
+/* Chesapeake bay: Build mesh
+  ----------------------------------
+  made during the European Finite Element Fair 2009 in TTK/ Helsinki  (6 june 2009) 
+  http://math.tkk.fi/numericsyear/fefair/
+  By F. Hecht 
+*/
+
+load "ppm2rnm"
+for (int i = 1; i++; i <=500 ){
+real[int,int] Curves(3,1);
+int[int] be(1);
+int nc;// nb of curve 
+string m = i;
+cout << "--- Experimento " << i<< "------"<< endl;
+{
+string rio; 
+
+rio = "new obstacles/obs_"+m+".pgm";
+cout << rio << endl;
+real[int,int] ff1(rio); // read  image and set to an rect. array 
+//  remark (0,0) is the upper, left corner.
+int nx = ff1.n, ny=ff1.m; 
+// build a cartesain mesh such that the origne is at the right place.
+mesh Th=square(nx-1,ny-1,[(nx-1)*(x),(ny-1)*(1-y)]); 
+//mesh Th = square(5, 5, [-1+2*x, -1+2*y]);
+mesh Tf=Th;
+// warning  the numbering is of the vertices (x,y) is 
+// given by $  i = x/nx + nx* y/ny $
+fespace Vh(Th,P1);
+
+
+Vh f1; f1[]=ff1;
+real vmax = f1[].max ;
+real vmin = f1[].min ;
+real vm = (vmin+vmax)/2;
+verbosity=3;
+/*
+ Usage of isoline
+ the named parameter :
+ iso=0.25        // value of iso 
+ close=1,        //   to force to have closing curve ... 
+ beginend=be,    // begin  and end of curve
+ smoothing=.01,  //   nb of smoothing process = size^ratio * 0.01 
+ where  size is the size of the curve ...  
+ ratio=0.5
+ file="filename"
+
+ ouptut: xx, yy  the array of point of the iso value 
+
+a closed curve  number n is
+
+in fortran notation the point of the curve are: 
+(xx[i],yy[i], i = i0, i1) 
+with :  i0=be[2*n],  i1=be[2*n+1];
+*/
+
+  nc=isoline(Th,f1,iso=vm,close=0,Curves,beginend=be,smoothing=.005,ratio=0.1); 
+  verbosity=1; 
+}
+
+int ic0=be(0), ic1=be(1)-1;
+
+border G(t=0,1) 
+{    
+  P=Curve(Curves,ic0,ic1,t);
+  label=5;	
+} 
+
+real hh= -10;
+
+real[int,int] ff1("new obstacles/obs_"+m+".pgm"); // read  image and set to an rect. array 
+//  remark (0,0) is the upper, left corner.
+int nx = ff1.n, ny=ff1.m; 
+
+real x0 = 0; real y0  = 0; real y1 = ny; real x1 = nx;
+border a(t=0, 1){                        // Lower 
+	x = x0+ t*(x1-x0); 
+	y = y0; 
+	label=1;}
+border b(t=0, 1){                        // Right
+	x = x1;                         
+	y = y0+ t*(y1-y0); 
+	label=2;}
+border c(t=0, 1){                        // Upper
+	x = x1+t*(x0-x1); 
+	y = y1; 
+	label=3;}
+border d(t=0, 1){                        // Left 
+	x = x0; 
+	y = y1+t*(y0-y1); 
+	label=4;}
+
+
+mesh Th=buildmesh(a(100)+b(100)+c(100)+d(100)+ G(100)); // Build the mesh with hole
+//Th = adaptmesh(Th, 1./5., IsMetric=1);
+Th = movemesh(Th, [x/875, y/656]);  // Scale the mesh between 0 and 1
+//plot(Th,wait=0); 
+
+/* 
+Finite element spaces: 
+For the Stokes system (u,p) is approximated via P2 x P1 elements
+*/
+fespace Vh(Th,P2); 
+fespace Ph(Th,P1); 
+
+
+// Solve stokes over Th
+
+Vh u1, v1, u2, v2; // u = (u1,u2) and test function v = (v1,v2)
+Ph p0,q0; // Pressures p0 and test pressure q0
+
+int nu = 1;
+solve Stokes ([u1,u2,p0],[v1,v2,q0]) =
+    int2d(Th)( ( nu*dx(u1)*dx(v1) + nu*dy(u1)*dy(v1)
+            +  nu*dx(u2)*dx(v2) + nu*dy(u2)*dy(v2) )
+            + 1e-10*p0*q0
+            - p0*dx(v1)- p0*dy(v2) 
+            + dx(u1)*q0+ dy(u2)*q0
+           )
+	+ int1d(Th,4)( 
+				v1*p0 - v1*nu*dx(u1) - v2*(dx(u2) + dy(u1))
+	)
+     + on(4, u1 =  -y*(y - 1), u2 = -y*(y - 1))  
+	 + on(1,3,5, u1 = 0, u2 = 0);  
+	 
+	 
+	 
+	 
+// Strain tensor components
+macro sigma011(u1,p0)  2*dx(u1)-p0 //EOM
+macro sigma022(u2,p0) 2*dy(u2)-p0 //EOM 
+macro sigma012(u1,u2) dy(u1)+ dx(u2) //EOM
+real error = 1e-1;
+
+/* Adapt Mesh Loop
+for (int i = 0; i  < 4; i++){
+	Stokes;
+	Th = adaptmesh(Th,u1,err = error);
+	error = error*0.5;
+	//plot(Th, cmm = "Adaptacion",wait =  1);
+	//cout << "Adaptacion " << i << endl;
+}
+*/
+
+
+// Plot of the velocity and pressure 
+//plot(coef=.5,cmm = "Velocidad [u1,u2]", [u1,u2], wait = 1, ps = "Stokes-pres.eps");
+//plot(u1,wait = 1, cmm = "u1");
+//plot(u2,wait = 1, cmm = "u2");
+//plot(p0,value=true,cmm="Presion",wait=1);
+
+// Measure for the Poincare - Steklov operator sigma \dot n 
+
+Ph sigma11,sigma12,sigma22,a11, a12;
+
+
+sigma11 = sigma011(u1,p0);
+sigma12 = sigma012(u1,u2);
+sigma22 = sigma022(u2,p0);
+
+
+cout << "Datos del borde" << endl;
+{
+	int k  = 0;
+	int j = 0;
+	int NbBoundaryElements = Th.nbe;// Numero de elementos en el borde
+	real[int] A(404);
+		
+	for (int k = 0; k  < NbBoundaryElements; k = k+1){	
+		int vert0 = Th.be(k)[0];
+		int vert1 = Th.be(k)[1];
+		if (Th(vert0).y == 0){
+			//cout << "Dato  " <<k <<" " <<  -sigma12(Th(vert0).x, Th(vert0).y) << "   " << -sigma22(Th(vert0).x, Th(vert0).y)  << endl;
+			A[j] = - sigma12(Th(vert0).x, Th(vert0).y);
+			A[j+1] = - sigma22(Th(vert0).x, Th(vert0).y);
+			j = j+2;
+			//cout << "x = " << Th.be(k).label <<endl;
+		}
+		else if (Th(vert0).y == 1){
+			//cout << "Dato  " <<k<<" " << sigma12(Th(vert0).x, Th(vert0).y) << "   " << sigma22(Th(vert0).x, Th(vert0).y)  << endl;
+			A[j] = sigma12(Th(vert0).x, Th(vert0).y);
+			A[j+1] = sigma22(Th(vert0).x, Th(vert0).y);
+			j = j+2;
+			//cout << "x = " << Th.be(k).label <<endl;
+
+		}
+		cout << "j:" << j << endl;
+	}
+
+
+	//ofstream out("circles_mediciones/exp"+m+".txt");
+	ofstream out("mediciones/tr_"+m+".csv");
+	for (int l = 0; l < A.n; l++){
+		if (l!= A.n-1){
+			out << A[l] << ",";
+		}
+		else{
+			out << A[l];
+		}
+	}
+	out  << endl;
+}
+}
