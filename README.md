@@ -1,5 +1,5 @@
-# Deep-Learning-Methods-for-a-fluid-inverse-problem
-# Master of Mathematics Thesis: Stokes System Obstacle Inversion via Neural Networks
+# Deep Learning Methods for a fluid inverse problem
+# Master of Mathematics Thesis
 
 ## Overview
 This repository contains the research and implementation for the Master's thesis that explores the intersection of the Stokes system obstacle inverse problem and artificial neural networks. The goal is to develop algorithms for reconstructing obstacles in viscous fluids using deep learning techniques.
